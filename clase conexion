@@ -1,0 +1,17 @@
+Mi proyecto que patron de desarrollo es?
+que me sirve a mi pwa, api, app
+* paquete arquitectnio:
+  singlents:
+    componentes
+    conexión jwt, dependencia, modelos 
+* app: app store-hibrido 
+* api: depende de la entidad-bancos; conectar otros sistemas con la base de datos 
+* pwa: conexión babaria, Coca-Cola-conexión internet(no necesita internet); funcionamiento sin conexión y subia la pagina como aplicación en el dispositivo 
+patron de diseño arquitectura
+
+
+** 1.  ir a al base de datos
+2. hacer la conexión en NetBeans
+3. subir el java en librerías y verifico la primera linea
+4. en servicios subo la bd
+5. y en java class empiezo subir el cogigo
