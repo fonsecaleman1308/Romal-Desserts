@@ -1,0 +1,368 @@
+package romale;
+
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.*;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.List;
+
+/** Romale Desserts - tienda local de cheesecakes (Swing, sin base de datos). */
+public class Main {
+    static final Color BG = new Color(14, 14, 16), CARD = new Color(28, 28, 34), PINK = new Color(232, 135, 159),
+            GOLD = new Color(212, 175, 55), WHITE = new Color(245, 245, 245), MUTED = new Color(160, 160, 170);
+    static final int ENVIO = 5000;
+    static final String[] NAMES = {"Oreo", "Frutos Rojos", "Maracuyá", "Limón", "Arándanos"};
+    static final String[] IMGS = {"oreo", "frutos", "maracuya", "limon", "arandanos"};
+    static final String[] DESC = {"Base de galleta, crema suave y trozos de Oreo", "Crema de vainilla con salsa de frutos rojos",
+            "Fresca crema con cobertura de maracuyá", "Cítrico y delicado, con ralladura de limón", "Cheesecake con salsa y arándanos frescos"};
+    static int[] PR = {12000, 12000, 10000, 12000, 12000};
+
+    static class Item { String name, img, detail; int price, qty; }
+    static List<Item> cart = new ArrayList<>();
+    static Map<String, String[]> users = new LinkedHashMap<>(); // usuario -> {clave, nombre, correo}
+    static List<String[]> orders = new ArrayList<>();           // {id, usuario, fecha, items, total, estado}
+    static String user = null;
+
+    static JFrame frame; static CardLayout cl = new CardLayout(); static JPanel content = new JPanel(cl);
+    static Map<String, JPanel> views = new LinkedHashMap<>(); static Map<String, Btn> nav = new LinkedHashMap<>();
+    static Map<String, Runnable> builders = new HashMap<>();
+
+    // ---------- utilidades de UI ----------
+    static String money(int n) { return String.format(Locale.US, "$%,d", n); }
+    static Font F(int st, int s) { return new Font("SansSerif", st, s); }
+    static Font S(int st, int s) { return new Font("Serif", st, s); }
+    static JLabel L(String t, Font f, Color c) { JLabel l = new JLabel(t); l.setFont(f); l.setForeground(c); return l; }
+    static ImageIcon img(String n, int w, int h) {
+        try { Image i = javax.imageio.ImageIO.read(Main.class.getResource("/romale/img/" + n + ".png"));
+            return new ImageIcon(i.getScaledInstance(w, h, Image.SCALE_SMOOTH)); }
+        catch (Exception e) { return new ImageIcon(new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB)); }
+    }
+    static JPanel col() { JPanel p = new JPanel(); p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS)); p.setOpaque(false); return p; }
+    static Component gap(int h) { return Box.createVerticalStrut(h); }
+    static <T extends JComponent> T ctr(T c) { c.setAlignmentX(0.5f); return c; }
+    static JScrollPane sp(Component c) { JScrollPane s = new JScrollPane(c); s.setBorder(null); s.getViewport().setBackground(BG);
+        s.getVerticalScrollBar().setUnitIncrement(16); return s; }
+    static <T extends AbstractButton> T sty(T b) { b.setOpaque(false); b.setForeground(WHITE); b.setFont(F(0, 13)); b.setFocusPainted(false); return b; }
+    static JTextField tf(JTextField t) {
+        t.setBackground(new Color(38, 38, 46)); t.setForeground(WHITE); t.setCaretColor(PINK); t.setFont(F(0, 14));
+        t.setBorder(new CompoundBorder(new LineBorder(new Color(80, 80, 92), 1, true), new EmptyBorder(8, 10, 8, 10)));
+        t.setPreferredSize(new Dimension(340, 42)); t.setMaximumSize(new Dimension(340, 42)); t.setAlignmentX(0.5f); return t;
+    }
+    static JTextField field(JPanel c, String label, boolean pass) {
+        c.add(ctr(L(label, F(0, 12), MUTED))); c.add(gap(3));
+        JTextField t = tf(pass ? new JPasswordField() : new JTextField()); c.add(t); c.add(gap(10)); return t;
+    }
+    static void combo(JComboBox<?> c) { c.setBackground(new Color(38, 38, 46)); c.setForeground(WHITE); c.setFont(F(0, 13)); }
+    static JPanel header(String t, String sub) {
+        JPanel h = col(); h.setBorder(new EmptyBorder(18, 30, 8, 30));
+        JLabel a = L(t, S(1, 34), GOLD), b = L(sub, F(0, 14), MUTED); a.setAlignmentX(0); b.setAlignmentX(0); h.add(a); h.add(b);
+        JPanel w = new JPanel(new BorderLayout()); w.setBackground(BG); w.add(h, BorderLayout.WEST); return w;
+    }
+    static JPanel centered(JComponent c) { JPanel w = new JPanel(new GridBagLayout()); w.setOpaque(false); w.add(c); return w; }
+    static RP card(int pad) { RP c = new RP(CARD, 28); c.setLayout(new BoxLayout(c, BoxLayout.Y_AXIS)); c.setBorder(new EmptyBorder(pad, pad, pad, pad)); return c; }
+    static void say(String m) { JOptionPane.showMessageDialog(frame, m, "Romale Desserts", JOptionPane.PLAIN_MESSAGE, img("logo", 48, 48)); }
+    static void empty(JPanel p, String msg, String btn, String to) {
+        RP c = card(34); c.add(ctr(L(msg, S(1, 22), WHITE))); c.add(gap(16)); Btn b = new Btn(btn, PINK, false);
+        b.addActionListener(e -> go(to)); c.add(ctr(b)); p.add(centered(c), BorderLayout.CENTER);
+    }
+    static JTable table(DefaultTableModel m) {
+        JTable t = new JTable(m); t.setBackground(CARD); t.setForeground(WHITE); t.setRowHeight(30); t.setFont(F(0, 13));
+        t.setGridColor(new Color(55, 55, 64)); t.setSelectionBackground(PINK); t.setSelectionForeground(Color.BLACK);
+        JTableHeader h = t.getTableHeader(); h.setBackground(new Color(40, 40, 48)); h.setForeground(GOLD); h.setFont(F(1, 13)); return t;
+    }
+    static JScrollPane tsp(JTable t) { JScrollPane s = new JScrollPane(t); s.setBorder(null); s.getViewport().setBackground(CARD); return s; }
+
+    static class RP extends JPanel {
+        Color bg; int r;
+        RP(Color bg, int r) { this.bg = bg; this.r = r; setOpaque(false); }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(bg); g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, r, r);
+            g2.setColor(new Color(212, 175, 55, 70)); g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, r, r); g2.dispose(); super.paintComponent(g);
+        }
+    }
+    static class Btn extends JButton {
+        Color c; boolean flat, active;
+        Btn(String t, Color c, boolean flat) {
+            super(t); this.c = c; this.flat = flat; setContentAreaFilled(false); setBorderPainted(false); setFocusPainted(false); setOpaque(false);
+            setFont(F(1, flat ? 13 : 14)); setBorder(new EmptyBorder(flat ? 8 : 10, flat ? 12 : 22, flat ? 8 : 10, flat ? 12 : 22));
+            setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)); setForeground(flat ? WHITE : new Color(20, 20, 20));
+        }
+        void setActive(boolean a) { active = a; setForeground(a ? PINK : WHITE); repaint(); }
+        protected void paintComponent(Graphics g) {
+            Graphics2D g2 = (Graphics2D) g.create(); g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            Color b = flat ? (active ? new Color(232, 135, 159, 45) : getModel().isRollover() ? new Color(255, 255, 255, 25) : null) : (getModel().isRollover() ? c.brighter() : c);
+            if (b != null) { g2.setColor(b); g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, 22, 22); }
+            g2.dispose(); super.paintComponent(g);
+        }
+    }
+
+    // ---------- lógica ----------
+    static void addCart(String name, String im, int price, String detail) {
+        for (Item i : cart) if (i.name.equals(name) && i.detail.equals(detail)) { i.qty++; refreshNav(); return; }
+        Item i = new Item(); i.name = name; i.img = im; i.price = price; i.detail = detail; i.qty = 1; cart.add(i); refreshNav();
+    }
+    static int subtotal() { int s = 0; for (Item i : cart) s += i.price * i.qty; return s; }
+    static void refreshNav() {
+        int n = 0; for (Item i : cart) n += i.qty;
+        nav.get("cart").setText("Carrito" + (n > 0 ? " (" + n + ")" : ""));
+        nav.get("login").setText(user == null ? "Login" : "Cuenta: " + user);
+    }
+    static void seed(String u) {
+        for (String[] o : orders) if (o[1].equals(u)) return;
+        String[][] d = {{"RD-0912", "12/08/2026", "1x Cheesecake Oreo", "12000", "Entregado"}, {"RD-0947", "29/08/2026", "1x Cheesecake Maracuyá, 1x Cheesecake Limón", "22000", "Entregado"},
+                {"RD-0981", "18/09/2026", "1x Cheesecake personalizado Mediano", "19500", "Entregado"}};
+        for (String[] x : d) orders.add(new String[]{x[0], u, x[1], x[2], x[3], x[4]});
+    }
+    static void go(String n) {
+        builders.get(n).run(); cl.show(content, n); for (Map.Entry<String, Btn> e : nav.entrySet()) e.getValue().setActive(e.getKey().equals(n)); refreshNav();
+    }
+
+    // ---------- 1. Catálogo ----------
+    static void catalog(JPanel p) {
+        p.add(header("Nuestros Cheesecakes", "Sabores artesanales hechos a mano con ingredientes premium"), BorderLayout.NORTH);
+        JPanel g = new JPanel(new GridLayout(1, 5, 16, 0)); g.setOpaque(false); g.setBorder(new EmptyBorder(10, 30, 30, 30));
+        for (int i = 0; i < 5; i++) {
+            final int k = i; RP c = card(14);
+            JLabel im = ctr(new JLabel(img(IMGS[i], 190, 150)));
+            c.add(im); c.add(gap(10)); c.add(ctr(L(NAMES[i], S(1, 22), WHITE))); c.add(gap(6));
+            c.add(ctr(L("<html><div style='text-align:center;width:160px'>" + DESC[i] + "</div></html>", F(0, 12), MUTED))); c.add(gap(10));
+            c.add(ctr(L(money(PR[i]), S(1, 26), GOLD))); c.add(gap(12));
+            Btn b = new Btn("Seleccionar", PINK, false); ctr(b);
+            b.addActionListener(e -> {
+                addCart("Cheesecake " + NAMES[k], IMGS[k], PR[k], "Tamaño mediano, receta clásica");
+                int r = JOptionPane.showOptionDialog(frame, "Cheesecake " + NAMES[k] + " agregado al carrito", "Romale Desserts", JOptionPane.DEFAULT_OPTION,
+                        JOptionPane.PLAIN_MESSAGE, img("logo", 48, 48), new String[]{"Seguir viendo", "Ir al carrito"}, "Ir al carrito");
+                if (r == 1) go("cart");
+            });
+            c.add(b); g.add(c);
+        }
+        JPanel w = new JPanel(new BorderLayout()); w.setOpaque(false); w.add(g, BorderLayout.NORTH); p.add(sp(w), BorderLayout.CENTER);
+    }
+
+    // ---------- 2. Personalizar ----------
+    static void custom(JPanel p) {
+        p.add(header("Personaliza tu Cheesecake", "Elige base, tamaño, extras y toppings: tú lo diseñas"), BorderLayout.NORTH);
+        String[] bases = {"Galleta clásica", "Oreo", "Brownie", "Almendra"}; int[] bp = {0, 1500, 2500, 2000};
+        String[] sizes = {"Mini · 12 cm", "Mediano · 18 cm", "Grande · 24 cm"}; int[] szp = {8000, 14000, 22000};
+        String[] ex = {"Mensaje en chocolate", "Vela decorativa", "Caja de regalo", "Flores comestibles"}; int[] exp = {3000, 1500, 4000, 3500};
+        String[] tp = {"Salsa de frutos rojos", "Chocolate belga", "Caramelo", "Oreo triturado", "Arándanos frescos", "Fresas frescas", "Hojuelas de oro"};
+        int[] tpp = {2000, 2500, 2000, 2000, 2500, 2500, 5000};
+        JLabel pv = new JLabel(img("oreo", 460, 362)), tot = L("", S(1, 32), GOLD); pv.setAlignmentX(0.5f);
+        JComboBox<String> fl = new JComboBox<>(NAMES), bs = new JComboBox<>(bases); combo(fl); combo(bs);
+        JRadioButton[] sz = new JRadioButton[3]; ButtonGroup bg = new ButtonGroup();
+        JCheckBox[] ec = new JCheckBox[ex.length], tc = new JCheckBox[tp.length];
+        Runnable[] up = new Runnable[1];
+        java.awt.event.ActionListener al = e -> up[0].run();
+        up[0] = () -> { int v = bp[bs.getSelectedIndex()];
+            for (int i = 0; i < 3; i++) if (sz[i].isSelected()) v += szp[i];
+            for (int i = 0; i < ec.length; i++) if (ec[i].isSelected()) v += exp[i];
+            for (int i = 0; i < tc.length; i++) if (tc[i].isSelected()) v += tpp[i];
+            tot.setText(money(v)); pv.setIcon(img(IMGS[fl.getSelectedIndex()], 460, 362)); };
+        RP left = card(18); left.add(pv); left.add(gap(10)); left.add(ctr(L("Sabor del cheesecake", F(0, 12), MUTED))); left.add(gap(4)); fl.setMaximumSize(new Dimension(300, 34)); left.add(ctr(fl));
+        RP right = card(22);
+        right.add(sec("1. Base")); bs.setMaximumSize(new Dimension(300, 34)); bs.setAlignmentX(0); right.add(bs);
+        right.add(sec("2. Tamaño")); JPanel r1 = new JPanel(new GridLayout(1, 3)); r1.setOpaque(false); r1.setAlignmentX(0);
+        for (int i = 0; i < 3; i++) { sz[i] = sty(new JRadioButton(sizes[i] + "  " + money(szp[i]))); bg.add(sz[i]); r1.add(sz[i]); sz[i].addActionListener(al); }
+        sz[1].setSelected(true); right.add(r1);
+        right.add(sec("3. Extras")); right.add(checks(ex, exp, ec, al));
+        right.add(sec("4. Toppings")); right.add(checks(tp, tpp, tc, al));
+        bs.addActionListener(al); fl.addActionListener(al); up[0].run();
+        right.add(gap(14)); JPanel bot = new JPanel(new BorderLayout()); bot.setOpaque(false); bot.setAlignmentX(0);
+        Btn add = new Btn("Agregar al carrito", PINK, false); JPanel bw = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0)); bw.setOpaque(false); bw.add(add); bot.add(tot, BorderLayout.WEST); bot.add(bw, BorderLayout.EAST); right.add(bot);
+        add.addActionListener(e -> {
+            int v = 0; String d = "Base " + bases[bs.getSelectedIndex()]; v += bp[bs.getSelectedIndex()];
+            for (int i = 0; i < 3; i++) if (sz[i].isSelected()) { v += szp[i]; d += ", " + sizes[i]; }
+            for (int i = 0; i < ec.length; i++) if (ec[i].isSelected()) { v += exp[i]; d += ", " + ex[i]; }
+            for (int i = 0; i < tc.length; i++) if (tc[i].isSelected()) { v += tpp[i]; d += ", " + tp[i]; }
+            addCart("Cheesecake personalizado (" + NAMES[fl.getSelectedIndex()] + ")", IMGS[fl.getSelectedIndex()], v, d);
+            go("cart");
+        });
+        JPanel body = new JPanel(new GridLayout(1, 2, 22, 0)); body.setOpaque(false); body.setBorder(new EmptyBorder(6, 30, 24, 30));
+        body.add(left); body.add(right); p.add(sp(body), BorderLayout.CENTER);
+    }
+    static JLabel sec(String t) { JLabel l = L(t, S(1, 18), PINK); l.setAlignmentX(0); l.setBorder(new EmptyBorder(12, 0, 6, 0)); return l; }
+    static JPanel checks(String[] n, int[] pr, JCheckBox[] out, java.awt.event.ActionListener al) {
+        JPanel g = new JPanel(new GridLayout(0, 2, 6, 2)); g.setOpaque(false); g.setAlignmentX(0);
+        for (int i = 0; i < n.length; i++) { out[i] = sty(new JCheckBox(n[i] + "  +" + money(pr[i]))); out[i].addActionListener(al); g.add(out[i]); }
+        return g;
+    }
+
+    // ---------- 3. Carrito ----------
+    static void cartView(JPanel p) {
+        p.add(header("Tu Carrito", "Revisa tus cheesecakes antes de pagar"), BorderLayout.NORTH);
+        if (cart.isEmpty()) { empty(p, "Tu carrito está vacío", "Ver catálogo", "catalog"); return; }
+        JPanel rows = col(); rows.setBorder(new EmptyBorder(6, 30, 20, 12));
+        for (Item it : new ArrayList<>(cart)) {
+            RP r = new RP(CARD, 24); r.setLayout(new BorderLayout(14, 0)); r.setBorder(new EmptyBorder(10, 12, 10, 16)); r.setMaximumSize(new Dimension(Integer.MAX_VALUE, 100));
+            r.add(new JLabel(img(it.img, 96, 76)), BorderLayout.WEST);
+            JPanel mid = col(); mid.add(L(it.name, F(1, 15), WHITE)); mid.add(L("<html><div style='width:330px'>" + it.detail + "</div></html>", F(0, 11), MUTED));
+            JPanel east = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 20)); east.setOpaque(false);
+            Btn m = new Btn("-", new Color(60, 60, 70), false), pl = new Btn("+", new Color(60, 60, 70), false), x = new Btn("x", new Color(150, 50, 70), false);
+            for (Btn b : new Btn[]{m, pl, x}) { b.setForeground(WHITE); b.setBorder(new EmptyBorder(4, 10, 4, 10)); }
+            m.addActionListener(e -> { if (--it.qty <= 0) cart.remove(it); go("cart"); }); pl.addActionListener(e -> { it.qty++; go("cart"); }); x.addActionListener(e -> { cart.remove(it); go("cart"); });
+            east.add(m); east.add(L("" + it.qty, F(1, 15), WHITE)); east.add(pl); east.add(L(money(it.price * it.qty), S(1, 20), GOLD)); east.add(x);
+            r.add(mid, BorderLayout.CENTER); r.add(east, BorderLayout.EAST); rows.add(r); rows.add(gap(10));
+        }
+        p.add(sp(rows), BorderLayout.CENTER);
+        RP side = card(24); 
+        side.add(ctr(L("Resumen", S(1, 24), GOLD))); side.add(gap(18));
+        side.add(line("Subtotal", money(subtotal()), WHITE)); side.add(line("Envío", money(ENVIO), WHITE)); side.add(gap(8)); side.add(line("Total", money(subtotal() + ENVIO), GOLD)); side.add(gap(22));
+        Btn pay = ctr(new Btn("Proceder al pago", PINK, false)), more = ctr(new Btn("Seguir comprando", new Color(60, 60, 70), false)); more.setForeground(WHITE);
+        pay.addActionListener(e -> go("payment")); more.addActionListener(e -> go("catalog")); side.add(pay); side.add(gap(10)); side.add(more);
+        JPanel w = new JPanel(new BorderLayout()); w.setOpaque(false); w.setBorder(new EmptyBorder(6, 0, 24, 30)); w.setPreferredSize(new Dimension(340, 10)); w.add(side, BorderLayout.NORTH); p.add(w, BorderLayout.EAST);
+    }
+    static JPanel line(String a, String b, Color c) { JPanel l = new JPanel(new BorderLayout()); l.setOpaque(false); l.setMaximumSize(new Dimension(999, 30));
+        l.add(L(a, F(0, 15), MUTED), BorderLayout.WEST); l.add(L(b, F(1, 17), c), BorderLayout.EAST); return l; }
+
+    // ---------- 4. Login ----------
+    static void login(JPanel p) {
+        p.add(header("Iniciar sesión", "Accede a tu cuenta Romale"), BorderLayout.NORTH);
+        RP c = card(32); c.setPreferredSize(new Dimension(440, 520));
+        c.add(ctr(new JLabel(img("logo", 110, 110)))); c.add(gap(6));
+        if (user != null) {
+            c.add(ctr(L("¡Hola, " + users.get(user)[1] + "!", S(1, 24), GOLD))); c.add(gap(8)); c.add(ctr(L("Tu sesión está activa", F(0, 14), MUTED))); c.add(gap(24));
+            Btn out = ctr(new Btn("Cerrar sesión", PINK, false)); out.addActionListener(e -> { user = null; go("login"); }); c.add(out);
+        } else {
+            c.add(ctr(L("Bienvenida a Romale", S(1, 22), WHITE))); c.add(gap(14));
+            JTextField u = field(c, "Usuario", false), pw = field(c, "Contraseña", true); c.add(gap(6));
+            Btn in = ctr(new Btn("Ingresar", PINK, false)); Btn reg = ctr(new Btn("¿Nuevo aquí? Crea tu cuenta", GOLD, true)); reg.setForeground(GOLD);
+            Runnable doIt = () -> { String[] d = users.get(u.getText().trim());
+                if (d == null || !d[0].equals(new String(((JPasswordField) pw).getPassword()))) { say("Usuario o contraseña incorrectos."); return; }
+                user = u.getText().trim(); seed(user); go(user.equals("admin") ? "admin" : "catalog"); };
+            in.addActionListener(e -> doIt.run()); pw.addActionListener(e -> doIt.run()); reg.addActionListener(e -> go("register"));
+            c.add(in); c.add(gap(8)); c.add(reg); c.add(gap(6)); c.add(ctr(L("Demo administrador: admin / admin123", F(0, 11), MUTED)));
+        }
+        p.add(centered(c), BorderLayout.CENTER);
+    }
+
+    // ---------- 5. Registro ----------
+    static void register(JPanel p) {
+        p.add(header("Crear cuenta", "Únete a la dulce experiencia Romale Desserts"), BorderLayout.NORTH);
+        RP c = card(30); c.setPreferredSize(new Dimension(440, 600));
+        JTextField n = field(c, "Nombre completo", false), m = field(c, "Correo electrónico", false), u = field(c, "Usuario", false),
+                a = field(c, "Contraseña (mín. 4 caracteres)", true), b = field(c, "Confirmar contraseña", true);
+        c.add(gap(6)); Btn ok = ctr(new Btn("Crear mi cuenta", PINK, false)); Btn back = ctr(new Btn("Ya tengo cuenta", GOLD, true)); back.setForeground(GOLD);
+        ok.addActionListener(e -> {
+            String us = u.getText().trim(), p1 = new String(((JPasswordField) a).getPassword()), p2 = new String(((JPasswordField) b).getPassword());
+            if (n.getText().trim().isEmpty() || us.isEmpty() || p1.isEmpty()) { say("Completa todos los campos."); return; }
+            if (!m.getText().matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) { say("Ingresa un correo válido."); return; }
+            if (p1.length() < 4) { say("La contraseña debe tener al menos 4 caracteres."); return; }
+            if (!p1.equals(p2)) { say("Las contraseñas no coinciden."); return; }
+            if (users.containsKey(us)) { say("Ese usuario ya existe. Elige otro."); return; }
+            users.put(us, new String[]{p1, n.getText().trim(), m.getText().trim()}); say("¡Cuenta creada! Ahora inicia sesión."); go("login");
+        });
+        back.addActionListener(e -> go("login")); c.add(ok); c.add(gap(8)); c.add(back); p.add(centered(c), BorderLayout.CENTER);
+    }
+
+    // ---------- 6. Mis pedidos ----------
+    static void ordersView(JPanel p) {
+        p.add(header("Mis Pedidos", "Historial de tus compras"), BorderLayout.NORTH);
+        if (user == null) { empty(p, "Inicia sesión para ver tus pedidos", "Ir a Login", "login"); return; }
+        JPanel rows = col(); rows.setBorder(new EmptyBorder(6, 30, 20, 30)); int n = 0;
+        for (int i = orders.size() - 1; i >= 0; i--) { String[] o = orders.get(i); if (!o[1].equals(user)) continue; n++;
+            RP r = new RP(CARD, 24); r.setLayout(new BorderLayout(20, 0)); r.setBorder(new EmptyBorder(16, 22, 16, 22)); r.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
+            JPanel l = col(); l.add(L("Pedido " + o[0], S(1, 19), GOLD)); l.add(L(o[2], F(0, 12), MUTED));
+            JPanel rt = col(); JLabel t = L(money(Integer.parseInt(o[4])), S(1, 21), WHITE); t.setAlignmentX(1f);
+            JLabel st = L(o[5], F(1, 12), o[5].equals("Entregado") ? new Color(110, 210, 140) : PINK); st.setAlignmentX(1f); rt.add(t); rt.add(st);
+            r.add(l, BorderLayout.WEST); r.add(L(o[3], F(0, 14), WHITE), BorderLayout.CENTER); r.add(rt, BorderLayout.EAST); rows.add(r); rows.add(gap(10)); }
+        if (n == 0) { empty(p, "Aún no tienes pedidos", "Ver catálogo", "catalog"); return; }
+        p.add(sp(rows), BorderLayout.CENTER);
+    }
+
+    // ---------- 7. Pago ----------
+    static void payment(JPanel p) {
+        p.add(header("Pago", "Elige tu medio de pago (simulado)"), BorderLayout.NORTH);
+        if (cart.isEmpty()) { empty(p, "No hay productos para pagar", "Ver catálogo", "catalog"); return; }
+        String[] meth = {"Tarjeta crédito / débito", "Nequi", "Daviplata", "PSE - Transferencia bancaria", "Efectivo contra entrega"};
+        RP left = card(24); left.add(L("Medio de pago", S(1, 22), GOLD)); left.add(gap(8));
+        ButtonGroup g = new ButtonGroup(); JRadioButton[] rb = new JRadioButton[5];
+        JPanel cf = col(), ph = col(); cf.setAlignmentX(0); ph.setAlignmentX(0);
+        JTextField num = field(cf, "Número de tarjeta", false), nom = field(cf, "Nombre del titular", false), exp = field(cf, "Vencimiento (MM/AA)", false), cvv = field(cf, "CVV", true),
+                cel = field(ph, "Número de celular", false); ph.setVisible(false);
+        for (int i = 0; i < 5; i++) { final int k = i; rb[i] = sty(new JRadioButton(meth[i])); rb[i].setFont(F(1, 15)); g.add(rb[i]); left.add(rb[i]);
+            rb[i].addActionListener(e -> { cf.setVisible(k == 0); ph.setVisible(k == 1 || k == 2); }); }
+        rb[0].setSelected(true); left.add(gap(10)); left.add(cf); left.add(ph);
+        RP right = card(24); right.add(ctr(L("Resumen del pedido", S(1, 22), GOLD))); right.add(gap(12));
+        for (Item it : cart) right.add(line(it.qty + "x " + it.name.replace("Cheesecake ", ""), money(it.price * it.qty), WHITE));
+        right.add(gap(8)); right.add(line("Envío", money(ENVIO), MUTED)); right.add(line("Total", money(subtotal() + ENVIO), GOLD)); right.add(gap(20));
+        Btn ok = ctr(new Btn("Confirmar pago", PINK, false)); right.add(ok);
+        ok.addActionListener(e -> {
+            if (user == null) { say("Inicia sesión para completar tu compra."); go("login"); return; }
+            int idx = 0; for (int i = 0; i < 5; i++) if (rb[i].isSelected()) idx = i;
+            if (idx == 0 && (num.getText().replaceAll("\\s", "").length() != 16 || nom.getText().trim().isEmpty() || !exp.getText().matches("\\d\\d/\\d\\d") || new String(((JPasswordField) cvv).getPassword()).length() != 3)) { say("Revisa los datos de la tarjeta (16 dígitos, vencimiento MM/AA, CVV de 3 dígitos)."); return; }
+            if ((idx == 1 || idx == 2) && !cel.getText().matches("\\d{10}")) { say("Ingresa un celular de 10 dígitos."); return; }
+            StringBuilder sb = new StringBuilder(); for (Item it : cart) sb.append(sb.length() > 0 ? ", " : "").append(it.qty).append("x ").append(it.name);
+            String id = "RD-" + (1000 + orders.size() + 1);
+            orders.add(new String[]{id, user, new SimpleDateFormat("dd/MM/yyyy").format(new Date()), sb.toString(), "" + (subtotal() + ENVIO), "En preparación"});
+            cart.clear(); say("¡Pago exitoso (simulado)!\nPedido " + id + " · " + meth[idx]); go("orders");
+        });
+        JPanel body = new JPanel(new GridLayout(1, 2, 22, 0)); body.setOpaque(false); body.setBorder(new EmptyBorder(6, 30, 24, 30)); body.add(left);
+        JPanel w = new JPanel(new BorderLayout()); w.setOpaque(false); w.add(right, BorderLayout.NORTH); body.add(w); p.add(sp(body), BorderLayout.CENTER);
+    }
+
+    // ---------- 8. Panel administrativo ----------
+    static void admin(JPanel p) {
+        p.add(header("Panel Administrativo", "Control y gestión de Romale Desserts"), BorderLayout.NORTH);
+        if (!"admin".equals(user)) { empty(p, "Acceso restringido: ingresa como administrador", "Ir a Login", "login"); return; }
+        int sales = 0; for (String[] o : orders) sales += Integer.parseInt(o[4]);
+        JPanel stats = new JPanel(new GridLayout(1, 4, 16, 0)); stats.setOpaque(false); stats.setBorder(new EmptyBorder(6, 30, 12, 30));
+        String[][] s = {{"Pedidos", "" + orders.size()}, {"Ventas", money(sales)}, {"Clientes", "" + (users.size() - 1)}, {"Sabores", "5"}};
+        for (String[] x : s) { RP c = card(16); c.add(ctr(L(x[0], F(0, 13), MUTED))); c.add(ctr(L(x[1], S(1, 28), GOLD))); stats.add(c); }
+        DefaultTableModel pm = new DefaultTableModel(new String[]{"Sabor", "Precio (COP)"}, 0) { public boolean isCellEditable(int r, int c) { return c == 1; } };
+        for (int i = 0; i < 5; i++) pm.addRow(new Object[]{NAMES[i], PR[i]});
+        DefaultTableModel om = new DefaultTableModel(new String[]{"ID", "Cliente", "Total", "Estado"}, 0) { public boolean isCellEditable(int r, int c) { return false; } };
+        for (String[] o : orders) om.addRow(new Object[]{o[0], o[1], money(Integer.parseInt(o[4])), o[5]});
+        JTable pt = table(pm), ot = table(om);
+        RP a = card(18), b = card(18);
+        a.add(L("Catálogo y precios", S(1, 20), PINK)); a.add(gap(8)); a.add(tsp(pt)); a.add(gap(10));
+        Btn sv = new Btn("Guardar precios", PINK, false); sv.setAlignmentX(0); sv.addActionListener(e -> {
+            if (pt.isEditing()) pt.getCellEditor().stopCellEditing();
+            try { for (int i = 0; i < 5; i++) PR[i] = Integer.parseInt(pm.getValueAt(i, 1).toString().replaceAll("[^0-9]", "")); say("Precios actualizados."); }
+            catch (Exception ex) { say("Ingresa solo números."); } });
+        a.add(sv);
+        b.add(L("Pedidos", S(1, 20), PINK)); b.add(gap(8)); b.add(tsp(ot)); b.add(gap(10));
+        Btn nx = new Btn("Avanzar estado", PINK, false); nx.setAlignmentX(0); nx.addActionListener(e -> {
+            int r = ot.getSelectedRow(); if (r < 0) { say("Selecciona un pedido."); return; }
+            String[] flow = {"Recibido", "En preparación", "En camino", "Entregado"}; String[] o = orders.get(r); int i = Arrays.asList(flow).indexOf(o[5]);
+            o[5] = flow[Math.min(3, i + 1)]; om.setValueAt(o[5], r, 3); });
+        b.add(nx);
+        JPanel grid = new JPanel(new GridLayout(1, 2, 16, 0)); grid.setOpaque(false); grid.setBorder(new EmptyBorder(0, 30, 24, 30)); grid.add(a); grid.add(b);
+        JPanel top = new JPanel(new BorderLayout()); top.setOpaque(false); top.add(stats, BorderLayout.NORTH); top.add(grid, BorderLayout.CENTER); p.add(top, BorderLayout.CENTER);
+    }
+
+    // ---------- arranque ----------
+    static void reg(String key, String label, Consumer1 fn, JPanel bar) {
+        JPanel v = new JPanel(new BorderLayout()); v.setBackground(BG); views.put(key, v); content.add(v, key);
+        builders.put(key, () -> { v.removeAll(); fn.build(v); v.revalidate(); v.repaint(); });
+        Btn b = new Btn(label, WHITE, true); b.addActionListener(e -> go(key)); nav.put(key, b); bar.add(b);
+    }
+    interface Consumer1 { void build(JPanel p); }
+
+    public static void main(String[] args) { SwingUtilities.invokeLater(Main::start); }
+    static JPanel buildUI() {
+        try { UIManager.setLookAndFeel(UIManager.getCrossPlatformLookAndFeelClassName()); } catch (Exception e) { }
+        UIManager.put("Panel.background", BG); UIManager.put("OptionPane.background", BG); UIManager.put("OptionPane.messageForeground", WHITE);
+        UIManager.put("ScrollBar.thumb", new Color(70, 70, 80)); UIManager.put("ScrollBar.track", BG);
+        users.put("admin", new String[]{"admin123", "Administrador", "admin@romale.com"});
+        seed("cliente_demo");
+        JPanel root = new JPanel(new BorderLayout()); root.setBackground(BG);
+        JPanel top = new JPanel(new BorderLayout()); top.setBackground(new Color(9, 9, 11)); top.setBorder(new CompoundBorder(new MatteBorder(0, 0, 1, 0, new Color(212, 175, 55, 120)), new EmptyBorder(6, 18, 6, 14)));
+        JPanel brand = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0)); brand.setOpaque(false); brand.add(new JLabel(img("logo", 52, 52)));
+        JPanel bt = col(); bt.add(L("Romale", S(1, 22), GOLD)); bt.add(L("D E S S E R T S", F(1, 10), PINK)); brand.add(bt); top.add(brand, BorderLayout.WEST);
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 10)); bar.setOpaque(false); top.add(bar, BorderLayout.EAST);
+        reg("catalog", "Catálogo", Main::catalog, bar); reg("custom", "Personalizar", Main::custom, bar); reg("cart", "Carrito", Main::cartView, bar);
+        reg("orders", "Mis pedidos", Main::ordersView, bar); reg("login", "Login", Main::login, bar); reg("register", "Registro", Main::register, bar);
+        reg("payment", "Pago", Main::payment, bar); reg("admin", "Admin", Main::admin, bar);
+        root.add(top, BorderLayout.NORTH); root.add(content, BorderLayout.CENTER);
+        go("catalog"); return root;
+    }
+    static void start() {
+        frame = new JFrame("Romale Desserts"); frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); frame.setIconImage(img("logo", 64, 64).getImage());
+        frame.setContentPane(buildUI());
+        frame.setSize(1300, 820); frame.setMinimumSize(new Dimension(1180, 720)); frame.setLocationRelativeTo(null); frame.setVisible(true);
+    }
+}
