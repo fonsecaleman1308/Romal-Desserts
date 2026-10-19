@@ -1,0 +1,535 @@
+guarda eset codigo:-- ============================================================
+-- BASE DE DATOS: romale_desserts
+-- Para MySQL / XAMPP (phpMyAdmin, pestaña SQL)
+-- Solo se usan los tipos INT y VARCHAR.
+-- Las fechas se guardan como texto (VARCHAR) con formato AAAA-MM-DD.
+-- Los precios se guardan como números enteros (pesos colombianos).
+-- ============================================================
+
+
+-- ============================================================
+-- 1. CREACIÓN DE LA BASE DE DATOS
+-- ============================================================
+-- Si la base ya existe en tu XAMPP y quieres empezar de cero,
+-- quita los dos guiones de la siguiente línea (esto BORRA todo lo que tenga):
+-- DROP DATABASE IF EXISTS romale_desserts;
+
+CREATE DATABASE romale_desserts CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
+-- ============================================================
+-- 2. SELECCIÓN DE LA BASE DE DATOS
+-- ============================================================
+USE romale_desserts;
+
+
+-- ============================================================
+-- 3. CREACIÓN DE LAS TABLAS
+-- Primero las tablas que no dependen de otras y después
+-- las que tienen llaves foráneas.
+-- ============================================================
+
+CREATE TABLE roles (
+    id_rol INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(150)
+);
+
+CREATE TABLE tipos_error (
+    id_tipo_error INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(80) NOT NULL,
+    descripcion VARCHAR(150)
+);
+
+CREATE TABLE `tamaños` (
+    id_tamano INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    medida VARCHAR(50),
+    precio INT NOT NULL
+);
+
+CREATE TABLE sabores (
+    id_sabor INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(150),
+    precio_adicional INT NOT NULL
+);
+
+CREATE TABLE toppings (
+    id_topping INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(150),
+    precio INT NOT NULL
+);
+
+CREATE TABLE extras (
+    id_extra INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(150),
+    precio INT NOT NULL
+);
+
+CREATE TABLE ingredientes (
+    id_ingrediente INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(60) NOT NULL,
+    unidad_medida VARCHAR(20) NOT NULL,
+    stock_actual INT NOT NULL,
+    stock_minimo INT NOT NULL
+);
+
+CREATE TABLE clientes (
+    id_cliente INT AUTO_INCREMENT PRIMARY KEY,
+    nombre_completo VARCHAR(100) NOT NULL,
+    correo VARCHAR(100) NOT NULL,
+    usuario VARCHAR(30) NOT NULL,
+    contrasena VARCHAR(50) NOT NULL,
+    telefono VARCHAR(20),
+    direccion VARCHAR(150)
+);
+
+CREATE TABLE clientes_internos (
+    id_interno INT AUTO_INCREMENT PRIMARY KEY,
+    id_rol INT NOT NULL,
+    nombre_completo VARCHAR(100) NOT NULL,
+    correo VARCHAR(100) NOT NULL,
+    usuario VARCHAR(30) NOT NULL,
+    contrasena VARCHAR(50) NOT NULL,
+    telefono VARCHAR(20),
+    FOREIGN KEY (id_rol) REFERENCES roles(id_rol)
+);
+
+CREATE TABLE pedidos (
+    id_pedido INT AUTO_INCREMENT PRIMARY KEY,
+    codigo_pedido VARCHAR(20) NOT NULL,
+    id_cliente INT NOT NULL,
+    fecha_pedido VARCHAR(20) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    costo_envio INT NOT NULL,
+    total INT NOT NULL,
+    direccion_entrega VARCHAR(150),
+    FOREIGN KEY (id_cliente) REFERENCES clientes(id_cliente)
+);
+
+CREATE TABLE cheesecakes_personalizados (
+    id_cheesecake INT AUTO_INCREMENT PRIMARY KEY,
+    id_tamano INT NOT NULL,
+    id_sabor INT NOT NULL,
+    nombre VARCHAR(80) NOT NULL,
+    descripcion VARCHAR(200),
+    precio INT NOT NULL,
+    FOREIGN KEY (id_tamano) REFERENCES `tamaños`(id_tamano),
+    FOREIGN KEY (id_sabor) REFERENCES sabores(id_sabor)
+);
+
+-- Tabla intermedia: qué toppings lleva cada cheesecake
+CREATE TABLE cheesecake_toppings (
+    id_cheesecake INT NOT NULL,
+    id_topping INT NOT NULL,
+    cantidad INT NOT NULL,
+    PRIMARY KEY (id_cheesecake, id_topping),
+    FOREIGN KEY (id_cheesecake) REFERENCES cheesecakes_personalizados(id_cheesecake),
+    FOREIGN KEY (id_topping) REFERENCES toppings(id_topping)
+);
+
+-- Tabla intermedia: qué extras lleva cada cheesecake
+CREATE TABLE cheesecake_extras (
+    id_cheesecake INT NOT NULL,
+    id_extra INT NOT NULL,
+    cantidad INT NOT NULL,
+    PRIMARY KEY (id_cheesecake, id_extra),
+    FOREIGN KEY (id_cheesecake) REFERENCES cheesecakes_personalizados(id_cheesecake),
+    FOREIGN KEY (id_extra) REFERENCES extras(id_extra)
+);
+
+CREATE TABLE detalle_pedido (
+    id_detalle INT AUTO_INCREMENT PRIMARY KEY,
+    id_pedido INT NOT NULL,
+    id_cheesecake INT NOT NULL,
+    cantidad INT NOT NULL,
+    precio_unitario INT NOT NULL,
+    subtotal INT NOT NULL,
+    FOREIGN KEY (id_pedido) REFERENCES pedidos(id_pedido),
+    FOREIGN KEY (id_cheesecake) REFERENCES cheesecakes_personalizados(id_cheesecake)
+);
+
+CREATE TABLE devoluciones (
+    id_devolucion INT AUTO_INCREMENT PRIMARY KEY,
+    id_pedido INT NOT NULL,
+    id_interno INT NOT NULL,
+    motivo VARCHAR(150) NOT NULL,
+    fecha_devolucion VARCHAR(20) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    monto_reembolsado INT NOT NULL,
+    FOREIGN KEY (id_pedido) REFERENCES pedidos(id_pedido),
+    FOREIGN KEY (id_interno) REFERENCES clientes_internos(id_interno)
+);
+
+CREATE TABLE errores_pedido (
+    id_error INT AUTO_INCREMENT PRIMARY KEY,
+    id_tipo_error INT NOT NULL,
+    id_pedido INT NOT NULL,
+    id_interno INT NOT NULL,
+    descripcion VARCHAR(200) NOT NULL,
+    fecha_error VARCHAR(20) NOT NULL,
+    estado VARCHAR(20) NOT NULL,
+    FOREIGN KEY (id_tipo_error) REFERENCES tipos_error(id_tipo_error),
+    FOREIGN KEY (id_pedido) REFERENCES pedidos(id_pedido),
+    FOREIGN KEY (id_interno) REFERENCES clientes_internos(id_interno)
+);
+
+CREATE TABLE movimientos_inventario (
+    id_movimiento INT AUTO_INCREMENT PRIMARY KEY,
+    id_ingrediente INT NOT NULL,
+    id_interno INT NOT NULL,
+    tipo_movimiento VARCHAR(20) NOT NULL,
+    cantidad INT NOT NULL,
+    fecha_movimiento VARCHAR(20) NOT NULL,
+    observacion VARCHAR(150),
+    FOREIGN KEY (id_ingrediente) REFERENCES ingredientes(id_ingrediente),
+    FOREIGN KEY (id_interno) REFERENCES clientes_internos(id_interno)
+);
+
+
+-- ============================================================
+-- 4. INSERCIÓN DE 15 REGISTROS EN CADA TABLA
+-- Los ids se asignan solos (1 a 15) en el orden en que se insertan,
+-- por eso las llaves foráneas apuntan a esos números.
+-- ============================================================
+
+-- ---------- roles ----------
+INSERT INTO roles (nombre, descripcion) VALUES
+('Administrador', 'Gestiona usuarios, productos y reportes'),
+('Gerente', 'Supervisa las ventas y al personal'),
+('Cocinero', 'Prepara los cheesecakes'),
+('Pastelero', 'Elabora las bases y los rellenos'),
+('Repartidor', 'Entrega los pedidos a los clientes'),
+('Atención al cliente', 'Atiende reclamos y devoluciones'),
+('Cajero', 'Registra los pagos'),
+('Supervisor de calidad', 'Revisa que los productos cumplan el estándar'),
+('Encargado de inventario', 'Controla las entradas y salidas de ingredientes'),
+('Contador', 'Lleva las cuentas y las facturas'),
+('Auxiliar de cocina', 'Ayuda en la preparación y la limpieza'),
+('Decorador', 'Decora los cheesecakes personalizados'),
+('Domiciliario nocturno', 'Entrega pedidos en horario nocturno'),
+('Soporte técnico', 'Atiende los errores de la aplicación'),
+('Practicante', 'Apoya las tareas generales del negocio');
+
+-- ---------- tipos_error ----------
+INSERT INTO tipos_error (nombre, descripcion) VALUES
+('Error de inicio de sesión', 'El usuario no puede iniciar sesión'),
+('Error de registro', 'No se puede crear una nueva cuenta'),
+('Producto no disponible', 'El producto elegido no está disponible'),
+('Error al crear pedido', 'No fue posible registrar el pedido'),
+('Error en personalización', 'Problema al guardar el cheesecake armado'),
+('Error de pago', 'El pago no pudo ser procesado'),
+('Pago rechazado', 'El medio de pago rechazó la transacción'),
+('Error de factura', 'Problema al generar o consultar una factura'),
+('Error de conexión', 'No hay conexión con la base de datos'),
+('Error de consulta', 'Problema al consultar información'),
+('Error de seguridad', 'Acceso no autorizado o actividad sospechosa'),
+('Error del sistema', 'Falla general de la aplicación'),
+('Dirección inválida', 'La dirección de entrega no existe o está incompleta'),
+('Pedido duplicado', 'El mismo pedido se registró dos veces'),
+('Otro', 'Error que no encaja en otra categoría');
+
+-- ---------- tamaños ----------
+INSERT INTO `tamaños` (nombre, medida, precio) VALUES
+('Vaso pequeño', '8 oz', 9000),
+('Vaso mediano', '12 oz', 12000),
+('Vaso grande', '16 oz', 15000),
+('Mini', '10 cm', 18000),
+('Pequeño', '14 cm', 32000),
+('Mediano', '18 cm', 45000),
+('Grande', '24 cm', 70000),
+('Familiar', '28 cm', 90000),
+('Rebanada individual', '1 porción', 8000),
+('Media docena de minis', '6 unidades', 30000),
+('Docena de minis', '12 unidades', 55000),
+('Cuadrado pequeño', '15 x 15 cm', 35000),
+('Cuadrado grande', '20 x 20 cm', 60000),
+('Corazón', '18 cm', 50000),
+('Gigante', '30 cm', 110000);
+
+-- ---------- sabores ----------
+INSERT INTO sabores (nombre, descripcion, precio_adicional) VALUES
+('Clásico', 'Cheesecake estilo Nueva York', 0),
+('Fresa', 'Con pulpa natural de fresa', 1500),
+('Maracuyá', 'Con salsa de maracuyá', 1500),
+('Arequipe', 'Con arequipe artesanal', 1000),
+('Chocolate', 'Con chocolate semiamargo', 1500),
+('Frutos rojos', 'Mezcla de fresa, mora y frambuesa', 2500),
+('Oreo', 'Con trozos de galleta Oreo', 2000),
+('Mora', 'Con salsa de mora de Castilla', 1500),
+('Limón', 'Con ralladura y jugo de limón', 1000),
+('Coco', 'Con crema y ralladura de coco', 1500),
+('Café', 'Con café molido y esencia de café', 2000),
+('Nutella', 'Con crema de avellanas y chocolate', 3000),
+('Vainilla', 'Con esencia natural de vainilla', 500),
+('Mango', 'Con pulpa de mango maduro', 2000),
+('Bocadillo con queso', 'Con trozos de bocadillo de guayaba', 2500);
+
+-- ---------- toppings ----------
+INSERT INTO toppings (nombre, descripcion, precio) VALUES
+('Salsa de fresa', 'Salsa dulce de fresa', 2000),
+('Salsa de chocolate', 'Salsa de chocolate caliente', 2000),
+('Arequipe', 'Hilo de arequipe por encima', 2000),
+('Chips de chocolate', 'Chips de chocolate semiamargo', 2500),
+('Galleta triturada', 'Galleta triturada para decorar', 1500),
+('Fruta fresca', 'Fruta de temporada picada', 3000),
+('Crema chantilly', 'Crema batida', 1500),
+('Maní caramelizado', 'Maní troceado con caramelo', 2500),
+('Coco rallado', 'Coco rallado tostado', 1500),
+('Almendras fileteadas', 'Almendras en láminas', 3500),
+('Salsa de mora', 'Salsa de mora de Castilla', 2000),
+('Merengue', 'Merengue ligeramente tostado', 2000),
+('Sprinkles de colores', 'Chispitas de colores', 1000),
+('Caramelo salado', 'Salsa de caramelo con sal', 2500),
+('Cerezas', 'Cerezas en almíbar', 3000);
+
+-- ---------- extras ----------
+INSERT INTO extras (nombre, descripcion, precio) VALUES
+('Vela de cumpleaños', 'Vela decorativa', 1000),
+('Tarjeta personalizada', 'Tarjeta con mensaje escrito a mano', 3000),
+('Caja de regalo', 'Caja decorada para obsequio', 5000),
+('Cuchara y servilletas', 'Kit desechable', 500),
+('Moño decorativo', 'Moño para la caja o el vaso', 2000),
+('Topper feliz cumpleaños', 'Letrero para poner sobre el postre', 4000),
+('Globo metálico', 'Globo pequeño con mensaje', 3500),
+('Bolsa de regalo', 'Bolsa de papel decorada', 2500),
+('Vela con número', 'Vela con el número de la edad', 2000),
+('Cuchillo para cortar', 'Cuchillo desechable', 1000),
+('Base de cartón decorada', 'Base resistente y decorada', 3000),
+('Etiqueta con nombre', 'Etiqueta con el nombre del cliente', 1500),
+('Flor comestible', 'Flor natural comestible', 4500),
+('Letrero de chocolate', 'Mensaje escrito en chocolate', 6000),
+('Kit de fiesta', 'Gorros, pitos y confeti', 8000);
+
+-- ---------- ingredientes ----------
+INSERT INTO ingredientes (nombre, unidad_medida, stock_actual, stock_minimo) VALUES
+('Queso crema', 'kg', 25, 10),
+('Azúcar', 'kg', 40, 15),
+('Galleta María', 'kg', 18, 8),
+('Galleta Oreo', 'kg', 12, 5),
+('Mantequilla', 'kg', 15, 6),
+('Huevos', 'unidad', 180, 60),
+('Crema de leche', 'litro', 30, 10),
+('Esencia de vainilla', 'litro', 3, 1),
+('Fresa', 'kg', 14, 5),
+('Maracuyá', 'kg', 10, 4),
+('Arequipe', 'kg', 12, 5),
+('Chocolate semiamargo', 'kg', 16, 6),
+('Harina de trigo', 'kg', 20, 8),
+('Mora', 'kg', 9, 4),
+('Limón', 'kg', 8, 3);
+
+-- ---------- clientes ----------
+INSERT INTO clientes (nombre_completo, correo, usuario, contrasena, telefono, direccion) VALUES
+('Laura Martínez', 'laura.martinez@correo.com', 'lmartinez', 'clave101', '3001234567', 'Calle 100 # 15-20, Bogotá'),
+('Carlos Rodríguez', 'carlos.rodriguez@correo.com', 'crodriguez', 'clave102', '3012345678', 'Carrera 7 # 72-41, Bogotá'),
+('Valentina Gómez', 'valentina.gomez@correo.com', 'vgomez', 'clave103', '3023456789', 'Avenida 68 # 45-12, Bogotá'),
+('Juan Pérez', 'juan.perez@correo.com', 'jperez', 'clave104', '3034567890', 'Calle 53 # 24-18, Bogotá'),
+('Camila Torres', 'camila.torres@correo.com', 'ctorres', 'clave105', '3045678901', 'Carrera 15 # 85-30, Bogotá'),
+('Santiago Herrera', 'santiago.herrera@correo.com', 'sherrera', 'clave106', '3056789012', 'Calle 134 # 9-50, Bogotá'),
+('Daniela Ruiz', 'daniela.ruiz@correo.com', 'druiz', 'clave107', '3067890123', 'Carrera 50 # 20-10, Bogotá'),
+('Andrés Castillo', 'andres.castillo@correo.com', 'acastillo', 'clave108', '3078901234', 'Calle 80 # 69-30, Bogotá'),
+('Mariana Ortiz', 'mariana.ortiz@correo.com', 'mortiz', 'clave109', '3089012345', 'Carrera 11 # 93-15, Bogotá'),
+('Felipe Vargas', 'felipe.vargas@correo.com', 'fvargas', 'clave110', '3090123456', 'Calle 26 # 59-40, Bogotá'),
+('Natalia Jiménez', 'natalia.jimenez@correo.com', 'njimenez', 'clave111', '3101234567', 'Avenida Boyacá # 63-20, Bogotá'),
+('Sebastián Moreno', 'sebastian.moreno@correo.com', 'smoreno', 'clave112', '3112345678', 'Calle 72 # 10-34, Bogotá'),
+('Paula Rojas', 'paula.rojas@correo.com', 'projas', 'clave113', '3123456789', 'Carrera 30 # 45-60, Bogotá'),
+('Diego Salazar', 'diego.salazar@correo.com', 'dsalazar', 'clave114', '3134567890', 'Calle 127 # 7-20, Bogotá'),
+('Isabella Mendoza', 'isabella.mendoza@correo.com', 'imendoza', 'clave115', '3145678901', 'Carrera 19 # 100-25, Bogotá');
+
+-- ---------- clientes_internos (id_rol apunta a la tabla roles) ----------
+INSERT INTO clientes_internos (id_rol, nombre_completo, correo, usuario, contrasena, telefono) VALUES
+(1, 'Administrador Romale', 'admin@romaledesserts.com', 'admin', 'admin123', '3201112233'),
+(2, 'Patricia Londoño', 'patricia.londono@romaledesserts.com', 'plondono', 'gerente123', '3202223344'),
+(3, 'Sofía Ramírez', 'sofia.ramirez@romaledesserts.com', 'sramirez', 'cocina123', '3203334455'),
+(3, 'Mateo Cárdenas', 'mateo.cardenas@romaledesserts.com', 'mcardenas', 'cocina124', '3204445566'),
+(4, 'Lucía Fernández', 'lucia.fernandez@romaledesserts.com', 'lfernandez', 'pastel123', '3205556677'),
+(5, 'Diego Castro', 'diego.castro@romaledesserts.com', 'dcastro', 'reparto123', '3206667788'),
+(5, 'Esteban Silva', 'esteban.silva@romaledesserts.com', 'esilva', 'reparto124', '3207778899'),
+(6, 'Marcela Díaz', 'marcela.diaz@romaledesserts.com', 'mdiaz', 'atencion123', '3208889900'),
+(6, 'Julián Acosta', 'julian.acosta@romaledesserts.com', 'jacosta', 'atencion124', '3209990011'),
+(7, 'Carolina Peña', 'carolina.pena@romaledesserts.com', 'cpena', 'caja123', '3211001122'),
+(8, 'Ricardo Molina', 'ricardo.molina@romaledesserts.com', 'rmolina', 'calidad123', '3212112233'),
+(9, 'Alejandra Cruz', 'alejandra.cruz@romaledesserts.com', 'acruz', 'inventa123', '3213223344'),
+(10, 'Héctor Duarte', 'hector.duarte@romaledesserts.com', 'hduarte', 'conta123', '3214334455'),
+(12, 'Valeria Santos', 'valeria.santos@romaledesserts.com', 'vsantos', 'decora123', '3215445566'),
+(14, 'Óscar Beltrán', 'oscar.beltran@romaledesserts.com', 'obeltran', 'soporte123', '3216556677');
+
+-- ---------- pedidos (id_cliente apunta a clientes) ----------
+-- total = subtotal del detalle + costo_envio
+INSERT INTO pedidos (codigo_pedido, id_cliente, fecha_pedido, estado, costo_envio, total, direccion_entrega) VALUES
+('PED-001', 1, '2026-09-20', 'Entregado', 5000, 54500, 'Calle 100 # 15-20, Bogotá'),
+('PED-002', 2, '2026-09-22', 'Entregado', 5000, 38000, 'Carrera 7 # 72-41, Bogotá'),
+('PED-003', 3, '2026-09-24', 'Entregado', 5000, 84500, 'Avenida 68 # 45-12, Bogotá'),
+('PED-004', 4, '2026-09-26', 'Cancelado', 5000, 42000, 'Calle 53 # 24-18, Bogotá'),
+('PED-005', 5, '2026-09-28', 'Entregado', 5000, 56500, 'Carrera 15 # 85-30, Bogotá'),
+('PED-006', 6, '2026-09-30', 'Entregado', 5000, 99000, 'Calle 134 # 9-50, Bogotá'),
+('PED-007', 7, '2026-10-02', 'Entregado', 5000, 106500, 'Carrera 50 # 20-10, Bogotá'),
+('PED-008', 8, '2026-10-04', 'Entregado', 5000, 44000, 'Calle 80 # 69-30, Bogotá'),
+('PED-009', 9, '2026-10-06', 'Cancelado', 5000, 41000, 'Carrera 11 # 93-15, Bogotá'),
+('PED-010', 10, '2026-10-08', 'Entregado', 5000, 44500, 'Calle 26 # 59-40, Bogotá'),
+('PED-011', 1, '2026-10-10', 'Entregado', 5000, 64000, 'Calle 100 # 15-20, Bogotá'),
+('PED-012', 2, '2026-10-12', 'Cancelado', 5000, 85000, 'Carrera 7 # 72-41, Bogotá'),
+('PED-013', 11, '2026-10-14', 'Entregado', 5000, 55000, 'Avenida Boyacá # 63-20, Bogotá'),
+('PED-014', 12, '2026-10-16', 'Entregado', 5000, 72500, 'Calle 72 # 10-34, Bogotá'),
+('PED-015', 3, '2026-10-17', 'Entregado', 5000, 76000, 'Avenida 68 # 45-12, Bogotá');
+
+-- ---------- cheesecakes_personalizados (id_tamano e id_sabor) ----------
+-- precio = tamaño + sabor adicional + topping + extra
+INSERT INTO cheesecakes_personalizados (id_tamano, id_sabor, nombre, descripcion, precio) VALUES
+(6, 2, 'Cheesecake Fresa Clásico', 'Mediano de fresa con salsa de fresa y vela', 49500),
+(1, 1, 'Vaso Clásico con Chantilly', 'Vaso pequeño clásico con crema chantilly', 11000),
+(7, 6, 'Cheesecake Frutos Rojos Fiesta', 'Grande de frutos rojos con fruta fresca y topper', 79500),
+(2, 5, 'Vaso de Chocolate Doble', 'Vaso mediano de chocolate con doble salsa', 18500),
+(6, 3, 'Cheesecake Maracuyá Merengue', 'Mediano de maracuyá con merengue y tarjeta', 51500),
+(4, 7, 'Mini Oreo Crunch', 'Mini de Oreo con galleta triturada y moño', 23500),
+(8, 12, 'Familiar Nutella Almendras', 'Familiar de Nutella con almendras y caja de regalo', 101500),
+(3, 4, 'Vaso Arequipe', 'Vaso grande de arequipe con hilo de arequipe', 19500),
+(10, 8, 'Media Docena Mora', 'Seis minis de mora con salsa de mora', 36000),
+(12, 9, 'Cuadrado Limón Coco', 'Cuadrado pequeño de limón con coco y vela número', 39500),
+(14, 2, 'Corazón de Fresa', 'Corazón de fresa con cerezas y flor comestible', 59000),
+(5, 11, 'Cheesecake Café Chips', 'Pequeño de café con chips de chocolate y globo', 40000),
+(9, 13, 'Rebanada Vainilla Sprinkles', 'Rebanada de vainilla con chispitas', 10000),
+(11, 14, 'Docena Minis Mango', 'Doce minis de mango con caramelo salado y kit', 67500),
+(13, 15, 'Cuadrado Bocadillo y Maní', 'Cuadrado grande de bocadillo con maní y letrero', 71000);
+
+-- ---------- cheesecake_toppings (id_cheesecake, id_topping, cantidad) ----------
+INSERT INTO cheesecake_toppings (id_cheesecake, id_topping, cantidad) VALUES
+(1, 1, 1),
+(2, 7, 1),
+(3, 6, 1),
+(4, 2, 2),
+(5, 12, 1),
+(6, 5, 1),
+(7, 10, 1),
+(8, 3, 1),
+(9, 11, 1),
+(10, 9, 1),
+(11, 15, 1),
+(12, 4, 1),
+(13, 13, 1),
+(14, 14, 1),
+(15, 8, 1);
+
+-- ---------- cheesecake_extras (id_cheesecake, id_extra, cantidad) ----------
+INSERT INTO cheesecake_extras (id_cheesecake, id_extra, cantidad) VALUES
+(1, 1, 1),
+(2, 4, 1),
+(3, 6, 1),
+(4, 4, 2),
+(5, 2, 1),
+(6, 5, 1),
+(7, 3, 1),
+(8, 12, 1),
+(9, 8, 1),
+(10, 9, 1),
+(11, 13, 1),
+(12, 7, 1),
+(13, 4, 1),
+(14, 15, 1),
+(15, 14, 1);
+
+-- ---------- detalle_pedido (id_pedido e id_cheesecake) ----------
+-- subtotal = cantidad x precio_unitario
+INSERT INTO detalle_pedido (id_pedido, id_cheesecake, cantidad, precio_unitario, subtotal) VALUES
+(1, 1, 1, 49500, 49500),
+(2, 2, 3, 11000, 33000),
+(3, 3, 1, 79500, 79500),
+(4, 4, 2, 18500, 37000),
+(5, 5, 1, 51500, 51500),
+(6, 6, 4, 23500, 94000),
+(7, 7, 1, 101500, 101500),
+(8, 8, 2, 19500, 39000),
+(9, 9, 1, 36000, 36000),
+(10, 10, 1, 39500, 39500),
+(11, 11, 1, 59000, 59000),
+(12, 12, 2, 40000, 80000),
+(13, 13, 5, 10000, 50000),
+(14, 14, 1, 67500, 67500),
+(15, 15, 1, 71000, 71000);
+
+-- ---------- devoluciones (id_pedido e id_interno de atención al cliente: 8 y 9) ----------
+INSERT INTO devoluciones (id_pedido, id_interno, motivo, fecha_devolucion, estado, monto_reembolsado) VALUES
+(1, 8, 'Sabor diferente al solicitado', '2026-09-21', 'Aprobada', 10000),
+(2, 9, 'Un vaso llegó aplastado', '2026-09-23', 'Aprobada', 11000),
+(3, 8, 'Faltó el topper de cumpleaños', '2026-09-25', 'Aprobada', 4000),
+(4, 9, 'Pedido cancelado por el cliente', '2026-09-26', 'Aprobada', 42000),
+(5, 8, 'El cliente reclama textura seca', '2026-09-29', 'Rechazada', 0),
+(6, 9, 'Un mini llegó dañado', '2026-10-01', 'Aprobada', 23500),
+(7, 8, 'Entrega tardía de más de una hora', '2026-10-03', 'Aprobada', 10000),
+(8, 9, 'Vaso con sabor equivocado', '2026-10-05', 'Aprobada', 19500),
+(9, 8, 'Pedido cancelado por demora en la confirmación', '2026-10-06', 'Aprobada', 41000),
+(10, 9, 'El producto no coincide con la foto', '2026-10-09', 'Rechazada', 0),
+(11, 8, 'La caja llegó abierta', '2026-10-11', 'En revisión', 0),
+(12, 9, 'Pedido cancelado por dirección incorrecta', '2026-10-12', 'Aprobada', 85000),
+(13, 8, 'Faltaron cucharas y servilletas', '2026-10-15', 'Aprobada', 2500),
+(14, 9, 'Producto con poco relleno', '2026-10-17', 'En revisión', 0),
+(15, 8, 'Sabor muy dulce según el cliente', '2026-10-18', 'Aprobada', 15000);
+
+-- ---------- errores_pedido (id_tipo_error, id_pedido, id_interno) ----------
+INSERT INTO errores_pedido (id_tipo_error, id_pedido, id_interno, descripcion, fecha_error, estado) VALUES
+(6, 4, 15, 'El pago con tarjeta tardó en confirmarse', '2026-09-26', 'Resuelto'),
+(7, 9, 8, 'El banco rechazó el primer intento de pago', '2026-10-06', 'Resuelto'),
+(5, 3, 15, 'No se guardó el topping elegido en el cheesecake', '2026-09-24', 'Resuelto'),
+(13, 12, 9, 'La dirección de entrega estaba incompleta', '2026-10-12', 'Resuelto'),
+(14, 6, 8, 'El pedido se registró dos veces por error', '2026-09-30', 'Resuelto'),
+(3, 7, 15, 'El sabor Nutella aparecía agotado al armar el pedido', '2026-10-02', 'Resuelto'),
+(4, 1, 15, 'La aplicación se cerró al confirmar el pedido', '2026-09-20', 'Resuelto'),
+(8, 2, 13, 'La factura salió con el valor incorrecto', '2026-09-22', 'Resuelto'),
+(10, 5, 15, 'No cargó el historial de pedidos del cliente', '2026-09-28', 'Resuelto'),
+(12, 8, 15, 'Falla general al abrir el menú de sabores', '2026-10-04', 'En revisión'),
+(9, 10, 15, 'Se perdió la conexión con la base de datos unos minutos', '2026-10-08', 'Resuelto'),
+(1, 11, 15, 'El cliente no pudo iniciar sesión con su contraseña', '2026-10-10', 'Resuelto'),
+(2, 13, 15, 'No permitía crear la cuenta con un correo nuevo', '2026-10-14', 'En revisión'),
+(11, 14, 1, 'Varios intentos de acceso fallidos desde otra ciudad', '2026-10-16', 'Nuevo'),
+(15, 15, 9, 'El cliente reportó un problema que no encaja en otra categoría', '2026-10-17', 'Nuevo');
+
+-- ---------- movimientos_inventario (id_ingrediente e id_interno) ----------
+INSERT INTO movimientos_inventario (id_ingrediente, id_interno, tipo_movimiento, cantidad, fecha_movimiento, observacion) VALUES
+(1, 12, 'Entrada', 20, '2026-09-18', 'Compra semanal de queso crema'),
+(2, 12, 'Entrada', 30, '2026-09-18', 'Compra de azúcar'),
+(3, 12, 'Entrada', 10, '2026-09-19', 'Reposición de galleta María'),
+(1, 3, 'Salida', 8, '2026-09-20', 'Uso en los pedidos del día'),
+(6, 4, 'Salida', 40, '2026-09-21', 'Huevos para la producción de cheesecakes'),
+(7, 12, 'Entrada', 25, '2026-09-22', 'Compra de crema de leche'),
+(9, 12, 'Entrada', 12, '2026-09-23', 'Compra de fresa fresca'),
+(9, 5, 'Salida', 4, '2026-09-24', 'Salsa y decoración de fresa'),
+(4, 12, 'Entrada', 8, '2026-09-25', 'Compra de galleta Oreo'),
+(12, 5, 'Salida', 3, '2026-09-27', 'Chocolate para los cheesecakes de chocolate'),
+(5, 12, 'Entrada', 10, '2026-09-29', 'Compra de mantequilla'),
+(10, 4, 'Salida', 2, '2026-10-02', 'Maracuyá para la salsa'),
+(13, 12, 'Entrada', 15, '2026-10-05', 'Compra de harina de trigo'),
+(15, 3, 'Salida', 1, '2026-10-08', 'Limón para el cheesecake de limón'),
+(11, 12, 'Entrada', 10, '2026-10-10', 'Compra de arequipe');
+
+
+-- ============================================================
+-- 5. CONSULTAS PARA COMPROBAR QUE LOS DATOS SE INGRESARON
+-- Ejecútalas una por una (selecciona la línea y pulsa "Continuar"),
+-- porque phpMyAdmin muestra solo el resultado de la última consulta.
+-- ============================================================
+
+SELECT * FROM roles;
+SELECT * FROM tipos_error;
+SELECT * FROM `tamaños`;
+SELECT * FROM sabores;
+SELECT * FROM toppings;
+SELECT * FROM extras;
+SELECT * FROM ingredientes;
+SELECT * FROM clientes;
+SELECT * FROM clientes_internos;
+SELECT * FROM pedidos;
+SELECT * FROM cheesecakes_personalizados;
+SELECT * FROM cheesecake_toppings;
+SELECT * FROM cheesecake_extras;
+SELECT * FROM detalle_pedido;
+SELECT * FROM devoluciones;
+SELECT * FROM errores_pedido;
+SELECT * FROM movimientos_inventario;
+
+-- Conteo rápido: cada consulta debe devolver 15
+SELECT COUNT(*) AS total_pedidos FROM pedidos;
+SELECT COUNT(*) AS total_detalles FROM detalle_pedido;
